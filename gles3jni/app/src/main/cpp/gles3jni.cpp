@@ -22,15 +22,15 @@
 #include "gles3jni.h"
 
 const Vertex QUAD[4] = {
-    // Square with diagonal < 2 so that it fits in a [-1 .. 1]^2 square
-    // regardless of rotation.
-    {{-0.7f, -0.7f}, {0x00, 0xFF, 0x00}},
-    {{ 0.7f, -0.7f}, {0x00, 0x00, 0xFF}},
-    {{-0.7f,  0.7f}, {0xFF, 0x00, 0x00}},
-    {{ 0.7f,  0.7f}, {0xFF, 0xFF, 0xFF}},
+        // Square with diagonal < 2 so that it fits in a [-1 .. 1]^2 square
+        // regardless of rotation.
+        {{-0.7f, -0.7f}, {0x00, 0xFF, 0x00}},
+        {{0.7f,  -0.7f}, {0x00, 0x00, 0xFF}},
+        {{-0.7f, 0.7f},  {0xFF, 0x00, 0x00}},
+        {{0.7f,  0.7f},  {0xFF, 0xFF, 0xFF}},
 };
 
-bool checkGlError(const char* funcName) {
+bool checkGlError(const char *funcName) {
     GLint err = glGetError();
     if (err != GL_NO_ERROR) {
         ALOGE("GL error after %s(): 0x%08x\n", funcName, err);
@@ -39,7 +39,7 @@ bool checkGlError(const char* funcName) {
     return false;
 }
 
-GLuint createShader(GLenum shaderType, const char* src) {
+GLuint createShader(GLenum shaderType, const char *src) {
     GLuint shader = glCreateShader(shaderType);
     if (!shader) {
         checkGlError("glCreateShader");
@@ -54,12 +54,12 @@ GLuint createShader(GLenum shaderType, const char* src) {
         GLint infoLogLen = 0;
         glGetShaderiv(shader, GL_INFO_LOG_LENGTH, &infoLogLen);
         if (infoLogLen > 0) {
-            GLchar* infoLog = (GLchar*)malloc(infoLogLen);
+            GLchar *infoLog = (GLchar *) malloc(infoLogLen);
             if (infoLog) {
                 glGetShaderInfoLog(shader, infoLogLen, NULL, infoLog);
                 ALOGE("Could not compile %s shader:\n%s\n",
-                        shaderType == GL_VERTEX_SHADER ? "vertex" : "fragment",
-                        infoLog);
+                      shaderType == GL_VERTEX_SHADER ? "vertex" : "fragment",
+                      infoLog);
                 free(infoLog);
             }
         }
@@ -70,7 +70,7 @@ GLuint createShader(GLenum shaderType, const char* src) {
     return shader;
 }
 
-GLuint createProgram(const char* vtxSrc, const char* fragSrc) {
+GLuint createProgram(const char *vtxSrc, const char *fragSrc) {
     GLuint vtxShader = 0;
     GLuint fragShader = 0;
     GLuint program = 0;
@@ -99,7 +99,7 @@ GLuint createProgram(const char* vtxSrc, const char* fragSrc) {
         GLint infoLogLen = 0;
         glGetProgramiv(program, GL_INFO_LOG_LENGTH, &infoLogLen);
         if (infoLogLen) {
-            GLchar* infoLog = (GLchar*)malloc(infoLogLen);
+            GLchar *infoLog = (GLchar *) malloc(infoLogLen);
             if (infoLog) {
                 glGetProgramInfoLog(program, infoLogLen, NULL, infoLog);
                 ALOGE("Could not link program:\n%s\n", infoLog);
@@ -110,23 +110,22 @@ GLuint createProgram(const char* vtxSrc, const char* fragSrc) {
         program = 0;
     }
 
-exit:
+    exit:
     glDeleteShader(vtxShader);
     glDeleteShader(fragShader);
     return program;
 }
 
-static void printGlString(const char* name, GLenum s) {
-    const char* v = (const char*)glGetString(s);
+static void printGlString(const char *name, GLenum s) {
+    const char *v = (const char *) glGetString(s);
     ALOGV("GL %s: %s\n", name, v);
 }
 
 // ----------------------------------------------------------------------------
 
 Renderer::Renderer()
-:   mNumInstances(0),
-    mLastFrameNs(0)
-{
+        : mNumInstances(0),
+          mLastFrameNs(0) {
     memset(mScale, 0, sizeof(mScale));
     memset(mAngularVelocity, 0, sizeof(mAngularVelocity));
     memset(mAngles, 0, sizeof(mAngles));
@@ -135,24 +134,24 @@ Renderer::Renderer()
 Renderer::~Renderer() {
 }
 
-void Renderer::resize(int w, int h) {
+void Renderer::resize(int w, int h) {/*
     auto offsets = mapOffsetBuf();
     calcSceneParams(w, h, offsets);
     unmapOffsetBuf();
 
     // Auto gives a signed int :-(
-    for (auto i = (unsigned)0; i < mNumInstances; i++) {
+    for (auto i = (unsigned) 0; i < mNumInstances; i++) {
         mAngles[i] = drand48() * TWO_PI;
-        mAngularVelocity[i] = MAX_ROT_SPEED * (2.0*drand48() - 1.0);
+        mAngularVelocity[i] = MAX_ROT_SPEED * (2.0 * drand48() - 1.0);
     }
 
-    mLastFrameNs = 0;
-
+    mLastFrameNs = 0;*/
+    ALOGV("glViewport : w is %d,h is%d", w, h);
     glViewport(0, 0, w, h);
 }
 
 void Renderer::calcSceneParams(unsigned int w, unsigned int h,
-        float* offsets) {
+                               float *offsets) {
     // number of cells along the larger screen dimension
     const float NCELLS_MAJOR = MAX_INSTANCES_PER_SIDE;
     // cell size in scene space
@@ -160,19 +159,19 @@ void Renderer::calcSceneParams(unsigned int w, unsigned int h,
 
     // Calculations are done in "landscape", i.e. assuming dim[0] >= dim[1].
     // Only at the end are values put in the opposite order if h > w.
-    const float dim[2] = {fmaxf(w,h), fminf(w,h)};
+    const float dim[2] = {fmaxf(w, h), fminf(w, h)};
     const float aspect[2] = {dim[0] / dim[1], dim[1] / dim[0]};
     const float scene2clip[2] = {1.0f, aspect[0]};
     const int ncells[2] = {
             static_cast<int>(NCELLS_MAJOR),
-            (int)floorf(NCELLS_MAJOR * aspect[1])
+            (int) floorf(NCELLS_MAJOR * aspect[1])
     };
 
     float centers[2][MAX_INSTANCES_PER_SIDE];
     for (int d = 0; d < 2; d++) {
         auto offset = -ncells[d] / NCELLS_MAJOR; // -1.0 for d=0
         for (auto i = 0; i < ncells[d]; i++) {
-            centers[d][i] = scene2clip[d] * (CELL_SIZE*(i + 0.5f) + offset);
+            centers[d][i] = scene2clip[d] * (CELL_SIZE * (i + 0.5f) + offset);
         }
     }
 
@@ -181,9 +180,9 @@ void Renderer::calcSceneParams(unsigned int w, unsigned int h,
     // outer product of centers[0] and centers[1]
     for (int i = 0; i < ncells[0]; i++) {
         for (int j = 0; j < ncells[1]; j++) {
-            int idx = i*ncells[1] + j;
-            offsets[2*idx + major] = centers[0][i];
-            offsets[2*idx + minor] = centers[1][j];
+            int idx = i * ncells[1] + j;
+            offsets[2 * idx + major] = centers[0][i];
+            offsets[2 * idx + minor] = centers[1][j];
         }
     }
 
@@ -195,7 +194,7 @@ void Renderer::calcSceneParams(unsigned int w, unsigned int h,
 void Renderer::step() {
     timespec now;
     clock_gettime(CLOCK_MONOTONIC, &now);
-    auto nowNs = now.tv_sec*1000000000ull + now.tv_nsec;
+    auto nowNs = now.tv_sec * 1000000000ull + now.tv_nsec;
 
     if (mLastFrameNs > 0) {
         float dt = float(nowNs - mLastFrameNs) * 0.000000001f;
@@ -209,14 +208,14 @@ void Renderer::step() {
             }
         }
 
-        float* transforms = mapTransformBuf();
+        float *transforms = mapTransformBuf();
         for (unsigned int i = 0; i < mNumInstances; i++) {
             float s = sinf(mAngles[i]);
             float c = cosf(mAngles[i]);
-            transforms[4*i + 0] =  c * mScale[0];
-            transforms[4*i + 1] =  s * mScale[1];
-            transforms[4*i + 2] = -s * mScale[0];
-            transforms[4*i + 3] =  c * mScale[1];
+            transforms[4 * i + 0] = c * mScale[0];
+            transforms[4 * i + 1] = s * mScale[1];
+            transforms[4 * i + 2] = -s * mScale[0];
+            transforms[4 * i + 3] = c * mScale[1];
         }
         unmapTransformBuf();
     }
@@ -225,7 +224,7 @@ void Renderer::step() {
 }
 
 void Renderer::render() {
-    step();
+//    step();
 
     glClearColor(0.2f, 0.2f, 0.3f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -235,22 +234,24 @@ void Renderer::render() {
 
 // ----------------------------------------------------------------------------
 
-static Renderer* g_renderer = NULL;
+static Renderer *g_renderer = NULL;
 
 extern "C" {
-    JNIEXPORT void JNICALL Java_com_android_gles3jni_GLES3JNILib_init(JNIEnv* env, jobject obj);
-    JNIEXPORT void JNICALL Java_com_android_gles3jni_GLES3JNILib_resize(JNIEnv* env, jobject obj, jint width, jint height);
-    JNIEXPORT void JNICALL Java_com_android_gles3jni_GLES3JNILib_step(JNIEnv* env, jobject obj);
+JNIEXPORT void JNICALL Java_com_android_gles3jni_GLES3JNILib_init(JNIEnv *env, jobject obj);
+JNIEXPORT void JNICALL
+Java_com_android_gles3jni_GLES3JNILib_resize(JNIEnv *env, jobject obj, jint width, jint height);
+JNIEXPORT void JNICALL Java_com_android_gles3jni_GLES3JNILib_step(JNIEnv *env, jobject obj);
 };
 
 #if !defined(DYNAMIC_ES3)
+
 static GLboolean gl3stubInit() {
     return GL_TRUE;
 }
 #endif
 
 JNIEXPORT void JNICALL
-Java_com_android_gles3jni_GLES3JNILib_init(JNIEnv* env, jobject obj) {
+Java_com_android_gles3jni_GLES3JNILib_init(JNIEnv *env, jobject obj) {
     if (g_renderer) {
         delete g_renderer;
         g_renderer = NULL;
@@ -261,9 +262,9 @@ Java_com_android_gles3jni_GLES3JNILib_init(JNIEnv* env, jobject obj) {
     printGlString("Renderer", GL_RENDERER);
     printGlString("Extensions", GL_EXTENSIONS);
 
-    const char* versionStr = (const char*)glGetString(GL_VERSION);
+    const char *versionStr = (const char *) glGetString(GL_VERSION);
     if (strstr(versionStr, "OpenGL ES 3.") && gl3stubInit()) {
-        g_renderer = createES3Renderer();
+        g_renderer = createES4Renderer();
     } else if (strstr(versionStr, "OpenGL ES 2.")) {
         g_renderer = createES2Renderer();
     } else {
@@ -272,14 +273,14 @@ Java_com_android_gles3jni_GLES3JNILib_init(JNIEnv* env, jobject obj) {
 }
 
 JNIEXPORT void JNICALL
-Java_com_android_gles3jni_GLES3JNILib_resize(JNIEnv* env, jobject obj, jint width, jint height) {
+Java_com_android_gles3jni_GLES3JNILib_resize(JNIEnv *env, jobject obj, jint width, jint height) {
     if (g_renderer) {
         g_renderer->resize(width, height);
     }
 }
 
 JNIEXPORT void JNICALL
-Java_com_android_gles3jni_GLES3JNILib_step(JNIEnv* env, jobject obj) {
+Java_com_android_gles3jni_GLES3JNILib_step(JNIEnv *env, jobject obj) {
     if (g_renderer) {
         g_renderer->render();
     }

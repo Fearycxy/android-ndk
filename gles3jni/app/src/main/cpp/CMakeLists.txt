@@ -32,13 +32,12 @@ elseif (${ANDROID_PLATFORM_LEVEL} LESS 18)
 else ()
   set(OPENGL_LIB GLESv3)
 endif (${ANDROID_PLATFORM_LEVEL} LESS 12)
-
 add_library(gles3jni SHARED
             ${GL3STUB_SRC}
             gles3jni.cpp 
             RendererES2.cpp
-            RendererES3.cpp)
-
+            RendererES3.cpp
+            RendererES4.cpp)
 # Include libraries needed for gles3jni lib
 target_link_libraries(gles3jni
             ${OPENGL_LIB}

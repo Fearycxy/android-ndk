@@ -27,7 +27,9 @@
 #if __ANDROID_API__ >= 24
 #include <GLES3/gl32.h>
 #elif __ANDROID_API__ >= 21
+
 #include <GLES3/gl31.h>
+
 #else
 #include <GLES3/gl3.h>
 #endif
@@ -36,7 +38,7 @@
 
 #define DEBUG 1
 
-#define LOG_TAG "GLES3JNI"
+#define LOG_TAG "GLES3JNI_NATIVE"
 #define ALOGE(...) __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__)
 #if DEBUG
 #define ALOGV(...) __android_log_print(ANDROID_LOG_VERBOSE, LOG_TAG, __VA_ARGS__)
@@ -72,9 +74,11 @@ struct Vertex {
 extern const Vertex QUAD[4];
 
 // returns true if a GL error occurred
-extern bool checkGlError(const char* funcName);
-extern GLuint createShader(GLenum shaderType, const char* src);
-extern GLuint createProgram(const char* vtxSrc, const char* fragSrc);
+extern bool checkGlError(const char *funcName);
+
+extern GLuint createShader(GLenum shaderType, const char *src);
+
+extern GLuint createProgram(const char *vtxSrc, const char *fragSrc);
 
 // ----------------------------------------------------------------------------
 // Interface to the ES2 and ES3 renderers, used by JNI code.
@@ -82,7 +86,9 @@ extern GLuint createProgram(const char* vtxSrc, const char* fragSrc);
 class Renderer {
 public:
     virtual ~Renderer();
+
     void resize(int w, int h);
+
     void render();
 
 protected:
@@ -90,17 +96,21 @@ protected:
 
     // return a pointer to a buffer of MAX_INSTANCES * sizeof(vec2).
     // the buffer is filled with per-instance offsets, then unmapped.
-    virtual float* mapOffsetBuf() = 0;
+    virtual float *mapOffsetBuf() = 0;
+
     virtual void unmapOffsetBuf() = 0;
+
     // return a pointer to a buffer of MAX_INSTANCES * sizeof(vec4).
     // the buffer is filled with per-instance scale and rotation transforms.
-    virtual float* mapTransformBuf() = 0;
+    virtual float *mapTransformBuf() = 0;
+
     virtual void unmapTransformBuf() = 0;
 
     virtual void draw(unsigned int numInstances) = 0;
 
 private:
-    void calcSceneParams(unsigned int w, unsigned int h, float* offsets);
+    void calcSceneParams(unsigned int w, unsigned int h, float *offsets);
+
     void step();
 
     unsigned int mNumInstances;
@@ -110,7 +120,10 @@ private:
     float mAngles[MAX_INSTANCES];
 };
 
-extern Renderer* createES2Renderer();
-extern Renderer* createES3Renderer();
+extern Renderer *createES2Renderer();
+
+extern Renderer *createES3Renderer();
+
+extern Renderer *createES4Renderer();
 
 #endif // GLES3JNI_H
