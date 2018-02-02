@@ -19,8 +19,6 @@
 
 #define STB_IMAGE_IMPLEMENTATION
 
-#include "stb_image.h"
-
 #define STR(s) #s
 #define STRV(s) STR(s)
 
@@ -117,6 +115,7 @@ const unsigned int SCR_HEIGHT = 600;
 Camera camera(glm::vec3(0.0f, 0.0f, 3.0f));
 // lighting
 glm::vec3 lightPos(1.2f, 1.0f, 2.0f);
+
 Renderer *createES4Renderer() {
     RendererES_light1 *renderer = new RendererES_light1;
     if (!renderer->init()) {
@@ -274,19 +273,19 @@ void RendererES_light1::draw(unsigned int numInstances) {
 
     // be sure to activate shader when setting uniforms/drawing objects
     glUseProgram(lightingShader);
-    setVec3(lightingShader,"objectColor", 1.0f, 0.5f, 0.31f);
-    setVec3(lightingShader,"lightColor", 1.0f, 1.0f, 1.0f);
+    setVec3(lightingShader, "objectColor", 1.0f, 0.5f, 0.31f);
+    setVec3(lightingShader, "lightColor", 1.0f, 1.0f, 1.0f);
 
     // view/projection transformations
     glm::mat4 projection = glm::perspective(glm::radians(camera.Zoom),
                                             (float) SCR_WIDTH / (float) SCR_HEIGHT, 0.1f, 100.0f);
     glm::mat4 view = camera.GetViewMatrix();
-    setMat4(lightingShader,"projection", projection);
-    setMat4(lightingShader,"view", view);
+    setMat4(lightingShader, "projection", projection);
+    setMat4(lightingShader, "view", view);
 
     // world transformation
     glm::mat4 model;
-    setMat4(lightingShader,"model", model);
+    setMat4(lightingShader, "model", model);
 
     // render the cube
     glBindVertexArray(cubeVAO);
@@ -295,12 +294,13 @@ void RendererES_light1::draw(unsigned int numInstances) {
 
     // also draw the lamp object
     glUseProgram(lampShader);
-    setMat4(lampShader,"projection", projection);
-    setMat4(lampShader,"view", view);
+    setMat4(lampShader, "projection", projection);
+    setMat4(lampShader, "view", view);
     model = glm::mat4();
     model = glm::translate(model, lightPos);
+
     model = glm::scale(model, glm::vec3(0.2f)); // a smaller cube
-    setMat4(lampShader,"model", model);
+    setMat4(lampShader, "model", model);
 
     glBindVertexArray(lightVAO);
     glDrawArrays(GL_TRIANGLES, 0, 36);

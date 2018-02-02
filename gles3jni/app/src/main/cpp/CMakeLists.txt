@@ -38,7 +38,7 @@ add_library(gles3jni SHARED
             utils.cpp
             RendererES2.cpp
             RendererES3.cpp
-            RendererES_light1.cpp)
+            Render_3D.cpp)
 # Include libraries needed for gles3jni lib
 target_link_libraries(gles3jni
             ${OPENGL_LIB}
