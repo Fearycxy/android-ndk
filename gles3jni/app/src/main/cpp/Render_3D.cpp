@@ -1,6 +1,7 @@
 #include "gles3jni.h"
 #include <EGL/egl.h>
 #include "utils.h"
+#include "include/camera.h"
 
 #define STB_IMAGE_IMPLEMENTATION
 
@@ -14,19 +15,65 @@
 #define SCALEROT_ATTRIB 2
 #define OFFSET_ATTRIB 3
 
-static const char VERTEX_SHADER[] =
+static const char LIGHT_VERTEX_SHADER[] =
         "#version 300 es\n"
                 "layout (location = 0) in vec3 aPos;\n"
-                "layout (location = 1) in vec2 aTexCoord;\n"
+                "layout (location = 1) in vec3 aNormal;\n"
                 "\n"
-                "out vec2 TexCoord;\n"
+                "out vec3 FragPos;\n"
+                "out vec3 Normal;\n"
                 "\n"
-                "uniform mat4 transform;\n"
+                "uniform mat4 model;\n"
+                "uniform mat4 view;\n"
+                "uniform mat4 projection;\n"
                 "\n"
                 "void main()\n"
                 "{\n"
-                "\tgl_Position = transform * vec4(aPos, 1.0);\n"
-                "\tTexCoord = vec2(aTexCoord.x, aTexCoord.y);\n"
+                "    FragPos = vec3(model * vec4(aPos, 1.0));\n"
+                "    Normal = aNormal;  \n"
+                "    \n"
+                "    gl_Position = projection * view * vec4(FragPos, 1.0);\n"
+                "}";
+
+static const char LIGHT_FRAGMENT_SHADER[] =
+        "#version 300 es\n"
+                "precision mediump float;\n"
+                "out vec4 FragColor;\n"
+                "\n"
+                "in vec3 Normal;  \n"
+                "in vec3 FragPos;  \n"
+                "  \n"
+                "uniform vec3 lightPos; \n"
+                "uniform vec3 lightColor;\n"
+                "uniform vec3 objectColor;\n"
+                "\n"
+                "void main()\n"
+                "{\n"
+                "    // ambient\n"
+                "    float ambientStrength = 0.1;\n"
+                "    vec3 ambient = ambientStrength * lightColor;\n"
+                "  \t\n"
+                "    // diffuse \n"
+                "    vec3 norm = normalize(Normal);\n"
+                "    vec3 lightDir = normalize(lightPos - FragPos);\n"
+                "    float diff = max(dot(norm, lightDir), 0.0);\n"
+                "    vec3 diffuse = diff * lightColor;\n"
+                "            \n"
+                "    vec3 result = (ambient + diffuse) * objectColor;\n"
+                "    FragColor = vec4(result, 1.0);\n"
+                "}";
+
+static const char VERTEX_SHADER[] =
+        "#version 300 es\n"
+                "layout (location = 0) in vec3 aPos;\n"
+                "\n"
+                "uniform mat4 model;\n"
+                "uniform mat4 view;\n"
+                "uniform mat4 projection;\n"
+                "\n"
+                "void main()\n"
+                "{\n"
+                "\tgl_Position = projection * view * model * vec4(aPos, 1.0);\n"
                 "}";
 
 static const char FRAGMENT_SHADER[] =
@@ -34,16 +81,9 @@ static const char FRAGMENT_SHADER[] =
                 "precision mediump float;\n"
                 "out vec4 FragColor;\n"
                 "\n"
-                "in vec2 TexCoord;\n"
-                "\n"
-                "// texture samplers\n"
-                "uniform sampler2D texture1;\n"
-                "uniform sampler2D texture2;\n"
-                "\n"
                 "void main()\n"
                 "{\n"
-                "\t// linearly interpolate between both textures (80% container, 20% awesomeface)\n"
-                "\tFragColor = mix(texture(texture1, TexCoord), texture(texture2, TexCoord), 0.2);\n"
+                "    FragColor = vec4(1.0); // set alle 4 vector values to 1.0\n"
                 "}";
 
 class Render_3D : public Renderer {
@@ -71,6 +111,8 @@ private:
 
     const EGLContext mEglContext;
     GLuint mProgram;
+    GLuint lightingShader;
+    GLuint lampShader;
     GLuint mVB[VB_COUNT];
     GLuint mVBState;
 };
@@ -92,97 +134,96 @@ Render_3D::Render_3D()
         mVB[i] = 0;
 }
 
-unsigned int VBO, VAO, EBO, texture;
+unsigned int VBO, VAO, EBO, texture, cubeVAO, lightVAO;
 unsigned int texture1, texture2;
+// timing
+float deltaTime = 0.0f;
+float lastFrame = 0.0f;
+
+// lighting
+glm::vec3 lightPos(1.2f, 1.0f, 2.0f);
 
 bool Render_3D::init() {
-    mProgram = createProgram(VERTEX_SHADER, FRAGMENT_SHADER);
-    if (!mProgram)
+    lightingShader = createProgram(LIGHT_VERTEX_SHADER, LIGHT_FRAGMENT_SHADER);
+    lampShader = createProgram(VERTEX_SHADER, FRAGMENT_SHADER);
+    if (!lightingShader || !lampShader)
         return false;
+    glEnable(GL_DEPTH_TEST);
+    glDepthFunc(GL_LESS);
+    // set up vertex data (and buffer(s)) and configure vertex attributes
+    // ------------------------------------------------------------------
+    // ------------------------------------------------------------------
     float vertices[] = {
-            // positions          // texture coords
-            0.5f, 0.5f, 0.0f, 1.0f, 1.0f, // top right
-            0.5f, -0.5f, 0.0f, 1.0f, 0.0f, // bottom right
-            -0.5f, -0.5f, 0.0f, 0.0f, 0.0f, // bottom left
-            -0.5f, 0.5f, 0.0f, 0.0f, 1.0f  // top left
-    };
-    unsigned int indices[] = {
-            0, 1, 3, // first triangle
-            1, 2, 3  // second triangle
-    };
-    glGenVertexArrays(1, &VAO);
-    glGenBuffers(1, &VBO);
-    glGenBuffers(1, &EBO);
+            -0.5f, -0.5f, -0.5f, 0.0f, 0.0f, -1.0f,
+            0.5f, -0.5f, -0.5f, 0.0f, 0.0f, -1.0f,
+            0.5f, 0.5f, -0.5f, 0.0f, 0.0f, -1.0f,
+            0.5f, 0.5f, -0.5f, 0.0f, 0.0f, -1.0f,
+            -0.5f, 0.5f, -0.5f, 0.0f, 0.0f, -1.0f,
+            -0.5f, -0.5f, -0.5f, 0.0f, 0.0f, -1.0f,
 
-    glBindVertexArray(VAO);
+            -0.5f, -0.5f, 0.5f, 0.0f, 0.0f, 1.0f,
+            0.5f, -0.5f, 0.5f, 0.0f, 0.0f, 1.0f,
+            0.5f, 0.5f, 0.5f, 0.0f, 0.0f, 1.0f,
+            0.5f, 0.5f, 0.5f, 0.0f, 0.0f, 1.0f,
+            -0.5f, 0.5f, 0.5f, 0.0f, 0.0f, 1.0f,
+            -0.5f, -0.5f, 0.5f, 0.0f, 0.0f, 1.0f,
+
+            -0.5f, 0.5f, 0.5f, -1.0f, 0.0f, 0.0f,
+            -0.5f, 0.5f, -0.5f, -1.0f, 0.0f, 0.0f,
+            -0.5f, -0.5f, -0.5f, -1.0f, 0.0f, 0.0f,
+            -0.5f, -0.5f, -0.5f, -1.0f, 0.0f, 0.0f,
+            -0.5f, -0.5f, 0.5f, -1.0f, 0.0f, 0.0f,
+            -0.5f, 0.5f, 0.5f, -1.0f, 0.0f, 0.0f,
+
+            0.5f, 0.5f, 0.5f, 1.0f, 0.0f, 0.0f,
+            0.5f, 0.5f, -0.5f, 1.0f, 0.0f, 0.0f,
+            0.5f, -0.5f, -0.5f, 1.0f, 0.0f, 0.0f,
+            0.5f, -0.5f, -0.5f, 1.0f, 0.0f, 0.0f,
+            0.5f, -0.5f, 0.5f, 1.0f, 0.0f, 0.0f,
+            0.5f, 0.5f, 0.5f, 1.0f, 0.0f, 0.0f,
+
+            -0.5f, -0.5f, -0.5f, 0.0f, -1.0f, 0.0f,
+            0.5f, -0.5f, -0.5f, 0.0f, -1.0f, 0.0f,
+            0.5f, -0.5f, 0.5f, 0.0f, -1.0f, 0.0f,
+            0.5f, -0.5f, 0.5f, 0.0f, -1.0f, 0.0f,
+            -0.5f, -0.5f, 0.5f, 0.0f, -1.0f, 0.0f,
+            -0.5f, -0.5f, -0.5f, 0.0f, -1.0f, 0.0f,
+
+            -0.5f, 0.5f, -0.5f, 0.0f, 1.0f, 0.0f,
+            0.5f, 0.5f, -0.5f, 0.0f, 1.0f, 0.0f,
+            0.5f, 0.5f, 0.5f, 0.0f, 1.0f, 0.0f,
+            0.5f, 0.5f, 0.5f, 0.0f, 1.0f, 0.0f,
+            -0.5f, 0.5f, 0.5f, 0.0f, 1.0f, 0.0f,
+            -0.5f, 0.5f, -0.5f, 0.0f, 1.0f, 0.0f
+    };
+    // first, configure the cube's VAO (and VBO)
+    glGenVertexArrays(1, &cubeVAO);
+    glGenBuffers(1, &VBO);
 
     glBindBuffer(GL_ARRAY_BUFFER, VBO);
     glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
 
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
-    glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices, GL_STATIC_DRAW);
+    glBindVertexArray(cubeVAO);
 
     // position attribute
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void *) 0);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void *) 0);
     glEnableVertexAttribArray(0);
-    // texture coord attribute
-    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(float),
+    // normal attribute
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float),
                           (void *) (3 * sizeof(float)));
     glEnableVertexAttribArray(1);
 
 
-    // load and create a texture
-    // -------------------------
-    // texture 1
-    // ---------
-    glGenTextures(1, &texture1);
-    glBindTexture(GL_TEXTURE_2D, texture1);
-    // set the texture wrapping parameters
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-    // set texture filtering parameters
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    // load image, create texture and generate mipmaps
-    int width, height, nrChannels;
-    stbi_set_flip_vertically_on_load(
-            true); // tell stb_image.h to flip loaded texture's on the y-axis.
-    unsigned char *data = stbi_load("/sdcard/awesomeface.png", &width,
-                                    &height, &nrChannels, 0);
-    if (data) {
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, data);
-        glGenerateMipmap(GL_TEXTURE_2D);
-    } else {
-        ALOGE("Failed to load texture wall");
-    }
-    stbi_image_free(data);
-    // texture 2
-    // ---------
-    glGenTextures(1, &texture2);
-    glBindTexture(GL_TEXTURE_2D, texture2);
-    // set the texture wrapping parameters
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-    // set texture filtering parameters
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    // load image, create texture and generate mipmaps
-    data = stbi_load("/sdcard/wall.jpg", &width,
-                     &height, &nrChannels, 0);
-    if (data) {
-        // note that the awesomeface.png has transparency and thus an alpha channel, so make sure to tell OpenGL the data type is of GL_RGBA
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, data);
-        glGenerateMipmap(GL_TEXTURE_2D);
-    } else {
-        ALOGE("Failed to load texture awesomeface");
-    }
-    stbi_image_free(data);
+    // second, configure the light's VAO (VBO stays the same; the vertices are the same for the light object which is also a 3D cube)
+    glGenVertexArrays(1, &lightVAO);
+    glBindVertexArray(lightVAO);
 
-    // tell opengl for each sampler to which texture unit it belongs to (only has to be done once)
-    // -------------------------------------------------------------------------------------------
-    glUseProgram(mProgram);
-    setInt(mProgram, "texture1", 0);
-    setInt(mProgram, "texture2", 1);
+    glBindBuffer(GL_ARRAY_BUFFER, VBO);
+    // note that we update the lamp's position attribute's stride to reflect the updated buffer data
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void *) 0);
+    glEnableVertexAttribArray(0);
+
+
     ALOGV("Using OpenGL ES 3.0 renderer");
     return true;
 }
@@ -199,9 +240,9 @@ Render_3D::~Render_3D() {
     glDeleteVertexArrays(1, &mVBState);
     glDeleteBuffers(VB_COUNT, mVB);
     glDeleteProgram(mProgram);*/
-    glDeleteVertexArrays(1, &VAO);
+    glDeleteVertexArrays(1, &cubeVAO);
+    glDeleteVertexArrays(1, &lightVAO);
     glDeleteBuffers(1, &VBO);
-    glDeleteBuffers(1, &EBO);
 }
 
 float *Render_3D::mapOffsetBuf() {
@@ -228,30 +269,56 @@ void Render_3D::unmapTransformBuf() {
 
 const unsigned int SCR_WIDTH = 800;
 const unsigned int SCR_HEIGHT = 600;
+Camera camera(glm::vec3(0.0f, 0.0f, 3.0f));
+long gDegreesRotated = 0;
+
 
 void Render_3D::draw(unsigned int numInstances) {
-    glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
-    glClear(GL_COLOR_BUFFER_BIT);
+    static float currentFrame = 0;
+    currentFrame++;
+    ALOGV("currentFrame: %f", currentFrame);
+    deltaTime = currentFrame - lastFrame;
+    lastFrame = currentFrame;
 
-    // bind textures on corresponding texture units
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, texture1);
-    glActiveTexture(GL_TEXTURE1);
-    glBindTexture(GL_TEXTURE_2D, texture2);
+    // render
+    // ------
+    glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-    // create transformations
-    static glm::mat4 transform(1.0f);
+    // be sure to activate shader when setting uniforms/drawing objects
+    glUseProgram(lightingShader);
+    setVec3(lightingShader, "objectColor", 1.0f, 0.5f, 0.31f);
+    setVec3(lightingShader, "lightColor", 1.0f, 1.0f, 1.0f);
+    setVec3(lightingShader, "lightPos", lightPos);
 
-    transform = glm::translate(transform, glm::vec3(0.5f, -0.5f, 0.0f));
-    transform = glm::rotate(transform, (float) getCurrentTime(), glm::vec3(0.0f, 0.0f, 1.0f));
+    // view/projection transformations
+    glm::mat4 projection = glm::perspective(glm::radians(camera.Zoom),
+                                            (float) SCR_WIDTH / (float) SCR_HEIGHT, 0.1f, 100.0f);
+    glm::mat4 view = camera.GetViewMatrix();
+    setMat4(lightingShader, "projection", projection);
+    setMat4(lightingShader, "view", view);
 
-    // get matrix's uniform location and set matrix
-    glUseProgram(mProgram);
-    unsigned int transformLoc = glGetUniformLocation(mProgram, "transform");
-    glUniformMatrix4fv(transformLoc, 1, GL_FALSE, glm::value_ptr(transform));
+    // world transformation
+    glm::mat4 model(1.0f);
+    model = rotate(model, (float) glm::radians(currentFrame), glm::vec3(1.0f, 1.0f, 1.0f));
+    setMat4(lightingShader, "model", model);
 
-    // render container
-    glBindVertexArray(VAO);
-    glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
+    // render the cube
+    glBindVertexArray(cubeVAO);
+    glDrawArrays(GL_TRIANGLES, 0, 36);
+
+
+    // also draw the lamp object
+    glUseProgram(lampShader);
+    setMat4(lampShader, "projection", projection);
+    setMat4(lampShader, "view", view);
+    model = glm::mat4(1.0f);
+    model = glm::translate(model, lightPos);
+    model = glm::scale(model, glm::vec3(0.2f)); // a smaller cube
+    setMat4(lampShader, "model", model);
+
+    glBindVertexArray(lightVAO);
+    glDrawArrays(GL_TRIANGLES, 0, 36);
+
 
 }
